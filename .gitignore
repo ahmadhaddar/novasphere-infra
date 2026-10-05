@@ -1,0 +1,26 @@
+# Terraform state & cache
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Variables & secrets (NON NEGOCIABLE - JAMAIS DANS GIT)
+*.tfvars
+*.tfvars.json
+!terraform.tfvars.example
+
+# Sensitive files & keys
+*.pem
+*.key
+.env
+
+# Crash & log files
+crash.log
+crash.*.log
+*.log
+tfplan
+tfplan.binary
+
+# Ansible generated inventories
+ansible/inventory*.ini
