@@ -1,0 +1,14 @@
+# Modele de configuration terraform.tfvars pour PROD
+# Copier ce fichier vers terraform.tfvars et ajuster si necessaire.
+# RAPPEL DU CAHIER DES CHARGES : terraform.tfvars ne doit JAMAIS etre commite dans Git !
+
+environment          = "prod"
+owner                = "hbq"
+instance_type        = "t3.small"
+asg_min_size         = 2
+asg_max_size         = 4
+asg_desired_capacity = 2
+
+# db_password NE DOIT PAS ETRE ECRIT ICI.
+# Il doit etre fourni par variable d'environnement au runtime :
+# export TF_VAR_db_password='VotreMotDePasseSecretProd!'
