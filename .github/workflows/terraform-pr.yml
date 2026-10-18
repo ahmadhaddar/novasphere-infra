@@ -1,0 +1,95 @@
+name: "Terraform PR (Dev & Module)"
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "envs/**"
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  plan-dev:
+    name: "Format, Validate & Plan Dev"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: envs/dev
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Setup Terraform"
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.1"
+
+      - name: "Configure AWS Credentials"
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: "Terraform Format Check"
+        run: terraform fmt -check -recursive
+        working-directory: .
+
+      - name: "Terraform Init"
+        run: terraform init -input=false
+
+      - name: "Terraform Validate"
+        run: terraform validate
+
+      - name: "Terraform Plan"
+        id: plan
+        env:
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD || 'DevCiPasswordSample2026!' }}
+        run: |
+          terraform plan -no-color -out=tfplan > plan_output.txt
+          cat plan_output.txt
+
+      - name: "Comment Plan on PR"
+        uses: actions/github-script@v7
+        if: always() && steps.plan.outcome != ''
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            let planText = '';
+            try {
+              planText = fs.readFileSync('${{ github.workspace }}/envs/dev/plan_output.txt', 'utf8');
+              if (planText.length > 60000) {
+                planText = planText.substring(0, 60000) + '\n... (plan tronqué)';
+              }
+            } catch (err) {
+              planText = 'Erreur lors de la capture du plan : ' + err;
+            }
+
+            const output = `### 📋 Rapport d'intégration continue Terraform
+            **Statut du Plan :** \`${{ steps.plan.outcome }}\`
+            **Environnement :** \`dev\`
+            
+            <details><summary>Afficher les détails du plan d'infrastructure</summary>
+
+            \`\`\`hcl
+            ${planText}
+            \`\`\`
+
+            </details>
+
+            *Poussé par : @${{ github.actor }} | Déclenché sur : \`${{ github.event_name }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
