@@ -44,6 +44,12 @@ variable "asg_min_size" {
   default     = 2
 }
 
+variable "demo_live_eval" {
+  description = "Variable ajoutee pour la demonstration live de Pull Request"
+  type        = bool
+  default     = true
+}
+
 variable "asg_max_size" {
   description = "Nombre maximal d'instances gerees par l'ASG"
   type        = number
@@ -54,6 +60,12 @@ variable "asg_desired_capacity" {
   description = "Capacite desiree pour l'ASG"
   type        = number
   default     = 2
+}
+
+variable "demo_live_eval" {
+  description = "Variable ajoutee pour la demonstration live de Pull Request"
+  type        = bool
+  default     = true
 }
 
 variable "db_password" {
