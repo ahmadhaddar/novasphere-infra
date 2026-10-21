@@ -62,12 +62,6 @@ variable "asg_desired_capacity" {
   default     = 2
 }
 
-variable "demo_live_eval" {
-  description = "Variable ajoutee pour la demonstration live de Pull Request"
-  type        = bool
-  default     = true
-}
-
 variable "db_password" {
   description = "Secret applicatif passe a Parameter Store en ecriture seule via TF_VAR_db_password"
   type        = string
