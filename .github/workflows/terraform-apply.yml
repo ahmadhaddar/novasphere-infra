@@ -7,9 +7,11 @@ on:
     paths:
       - "envs/**"
       - ".github/workflows/**"
-  schedule:
-    # Détection de dérive nocturne chaque nuit à 02h00 UTC
-    - cron: "0 2 * * *"
+  # Le declencheur nocturne cron est commente en contexte AWS Academy Learner Lab :
+  # les tokens de session temporaires (AWS_SESSION_TOKEN) expirent au bout de 4h quand le lab s eteint.
+  # La detection de derive se declenche a la demande via workflow_dispatch ou terraform plan -detailed-exitcode.
+  # schedule:
+  #   - cron: "0 2 * * *"
   workflow_dispatch:
 
 permissions:
@@ -142,12 +144,12 @@ jobs:
           terraform plan -input=false -detailed-exitcode -no-color
           EXIT_CODE=$?
           if [ $EXIT_CODE -eq 0 ]; then
-            echo "Aucune dérive détectée : le cloud est parfaitement synchrone avec le code."
+            echo "Aucune derive detectee : le cloud est parfaitement synchrone avec le code."
             exit 0
           elif [ $EXIT_CODE -eq 2 ]; then
-            echo "Plan détecte des changements (normal car infrastructure non encore déployée ou drift)."
+            echo "Plan detecte des changements (normal car infrastructure non encore deployee ou drift)."
             exit 0
           else
-            echo "::error::Erreur lors de l'exécution de terraform plan."
+            echo "::error::Erreur lors de l execution de terraform plan."
             exit $EXIT_CODE
           fi
