@@ -52,7 +52,7 @@ jobs:
 
       - name: "Terraform Plan"
         env:
-          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD || 'DevCiPasswordSample2026!' }}
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
         run: terraform plan -input=false -out=tfplan
 
       - name: "Terraform Apply"
@@ -95,7 +95,7 @@ jobs:
 
       - name: "Terraform Plan"
         env:
-          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD_PROD || 'ProdCiPasswordSample2026!' }}
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD_PROD }}
         run: terraform plan -input=false -out=tfplan
 
       - name: "Terraform Apply"
@@ -106,6 +106,7 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         env_dir: [envs/dev, envs/prod]
 
@@ -138,17 +139,18 @@ jobs:
 
       - name: "Check Drift"
         env:
-          TF_VAR_db_password: "DriftCheckPlaceholderPassword2026!"
+          TF_VAR_db_password: ${{ matrix.env_dir == 'envs/prod' && secrets.TF_VAR_DB_PASSWORD_PROD || secrets.TF_VAR_DB_PASSWORD }}
         run: |
           set +e
+          # 0 = conforme, 2 = derive detectee (le job echoue pour alerter), autre = erreur
           terraform plan -input=false -detailed-exitcode -no-color
           EXIT_CODE=$?
           if [ $EXIT_CODE -eq 0 ]; then
             echo "Aucune derive detectee : le cloud est parfaitement synchrone avec le code."
             exit 0
           elif [ $EXIT_CODE -eq 2 ]; then
-            echo "Plan detecte des changements (normal car infrastructure non encore deployee ou drift)."
-            exit 0
+            echo "::error::Derive detectee dans ${{ matrix.env_dir }} : l'infrastructure reelle ne correspond plus au code."
+            exit 2
           else
             echo "::error::Erreur lors de l execution de terraform plan."
             exit $EXIT_CODE

@@ -73,10 +73,10 @@ Le socle backend partagé repose sur le bucket S3 mondial `novasphere-tfstate-hb
    *(Ne jamais renseigner de mot de passe en dur dans les fichiers `.tf` ou `tfvars` !)*
    ```bash
    # Linux / macOS / Git Bash :
-   export TF_VAR_db_password="NovaSphereDevSecret2026!"
+   export TF_VAR_db_password="<mot-de-passe-dev>"
 
    # Windows PowerShell :
-   $env:TF_VAR_db_password="NovaSphereDevSecret2026!"
+   $env:TF_VAR_db_password="<mot-de-passe-dev>"
    ```
 
 3. **Initialiser Terraform :**
@@ -119,7 +119,7 @@ Le socle backend partagé repose sur le bucket S3 mondial `novasphere-tfstate-hb
 
 3. **Vérifier l'absence absolue de secret dans le tfstate :**
    ```bash
-   terraform state pull | grep -c "NovaSphereDevSecret2026!"
+   terraform state pull | grep -c "$TF_VAR_db_password"
    # Doit retourner 0
    ```
 
@@ -130,7 +130,7 @@ Le socle backend partagé repose sur le bucket S3 mondial `novasphere-tfstate-hb
 Le déploiement en production suit exactement la même rigueur :
 ```bash
 cd ../prod
-export TF_VAR_db_password="NovaSphereProdSuperSecret2026!"
+export TF_VAR_db_password="<mot-de-passe-prod>"
 terraform init
 terraform plan -out=tfplan
 terraform apply tfplan

@@ -1,5 +1,6 @@
 # Donnees dynamiques AWS
 data "aws_availability_zones" "available" {
+  #checkov:skip=CKV_AWS_394:On ne retient que les 2 premieres zones via slice(), l'ajout d'une zone par AWS ne change rien
   state = "available"
 }
 
