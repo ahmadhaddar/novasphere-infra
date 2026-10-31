@@ -10,7 +10,7 @@ Ce document décrit l'architecture déployée sur Amazon Web Services (AWS) pour
                                   INTERNET
                                       │
                                       ▼
-             [ AWS Route 53 / DNS externe ou DNS public ALB ]
+             [ Nom DNS public de l'ALB (*.elb.amazonaws.com) ]
                                       │
                                       ▼ [HTTP : 80]
                   ┌────────────────────────────────────────┐
@@ -70,14 +70,18 @@ Ce document décrit l'architecture déployée sur Amazon Web Services (AWS) pour
    - Encapsule le Launch Template, le Security Group d'instance (`create_before_destroy = true`) et l'Auto Scaling Group.
 
 4. **Résilience et Tolérance aux Pannes :**
-   - Répartition sur 2 zones de disponibilité (`us-east-1a` et `us-east-1b`).
+   - Répartition sur les 2 premières zones de disponibilité de `us-east-1` (`slice()` sur la data source).
    - Auto Scaling Group configuré avec `health_check_type = "ELB"`, `min_size = 2`, `max_size = 4`. Si une instance devient défaillante, l'ASG la remplace automatiquement sans coupure.
 
 5. **Sécurité et Hygiène des Secrets :**
    - Stockage dans AWS SSM Parameter Store en `SecureString`.
    - Écriture Terraform via `value_wo` et variable `ephemeral = true` : le secret n'est jamais mémorisé dans le `tfstate` ni affiché dans les logs du plan.
-   - Lecture au boot via le rôle IAM EC2 au moindre privilège.
+   - Lecture au boot via `LabInstanceProfile` : le Learner Lab refuse `iam:CreateRole`, donc pas de rôle par environnement (preuve et politique cible dans SECURITE.md, §2.2 et §2.3).
    - Protection IMDSv2 obligatoire (`http_tokens = "required"`, `http_put_response_hop_limit = 1`) pour bloquer toute fuite de token de métadonnées (attaques SSRF).
+
+6. **Authentification de la CI :**
+   - Cible : OIDC entre GitHub Actions et AWS, sans clé stockée (`ci.tf`, activable avec `enable_oidc_ci = true`).
+   - Dans le Learner Lab, la création du rôle est refusée (`AccessDenied` sur `iam:CreateRole`, testé le 31/10/2026). La CI utilise donc les credentials de session du lab, stockés dans les secrets GitHub et renouvelés avant chaque utilisation.
 
 ---
 
@@ -88,13 +92,14 @@ Ce document décrit l'architecture déployée sur Amazon Web Services (AWS) pour
 | **Workspaces Terraform** | Rejetés par le cahier des charges : workspace courant invisible dans le terminal, risque d'erreur critique de destruction croisée (`terraform destroy`), partage de bucket et de credentials empêchant l'isolation des accès. | Répertoires distincts `envs/dev` et `envs/prod`. |
 | **NAT Gateway** | Coût prohibitif en environnement d'apprentissage (~0,05 $/h + trafic par Gateway), consommation excessive des crédits Learner Lab. | Instances en subnets publics protégées par des Security Groups hermétiques (seul l'ALB est autorisé en entrée). |
 | **`sensitive = true` pour les secrets** | Masque seulement la valeur dans la sortie console du terminal mais écrit le secret **en clair dans le fichier `terraform.tfstate`**. | Arguments en écriture seule `value_wo` et `ephemeral = true` vers Parameter Store. |
-| **Accès SSH direct (Port 22)** | Risque de compromission, gestion lourde de clés privées, interdit par les règles de sécurité du cours. | Port 22 totalement fermé ; administration à distance via SSM Session Manager. |
+| **Accès SSH direct (Port 22)** | Risque de compromission, gestion lourde de clés privées, interdit par les règles de sécurité du cours. | Port 22 totalement fermé ; les instances sont jetables et reconstruites par l'ASG, aucune connexion interactive n'est nécessaire. |
+| **Ansible au démarrage (`ansible-pull`)** | Bonus non retenu : un script d'amorçage de 10 lignes suffit pour installer nginx et lire le secret, sans dépendance supplémentaire sur l'instance. | `bootstrap.sh` dans le Launch Template. |
 | **DynamoDB pour le verrouillage** | Méthode historique déclarée officiellement dépréciée par HashiCorp depuis Terraform 1.11. | Verrouillage natif S3 (`use_lockfile = true`). |
 
 ---
 
-## 4. Extension Choisie : Tests de Module & Administration SSM
+## 4. Extension
 
-L'équipe a implémenté une double valorisation pour le bonus de 2 points :
-1. **Tests unitaires de module (`terraform test`) :** Définis dans `tests/unit_test.tftest.hcl` au sein du module `terraform-aws-web-asg`. Ils valident automatiquement avant déploiement que les contraintes d'architecture (haute disponibilité $\ge 2$, `health_check_type = "ELB"`, et exigence IMDSv2) sont strictement respectées.
-2. **Administration sans SSH (SSM Session Manager) :** L'instance profile IAM permet d'ouvrir une session interactive shell sécurisée et auditée via la commande `aws ssm start-session --target <instance-id>`, sans aucune ouverture de port réseau.
+Le seul bonus prévu par le cahier des charges est Ansible au démarrage ; il n'est pas retenu (voir alternatives écartées).
+
+En complément, le module `terraform-aws-web-asg` contient des tests `terraform test` (`tests/unit_test.tftest.hcl`) qui vérifient trois exigences : au moins 2 instances, health check de type ELB, et IMDSv2 obligatoire.

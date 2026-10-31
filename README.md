@@ -58,6 +58,36 @@ novasphere-infra/
 
 ---
 
+## 3 bis. Préparation unique (une fois par compte)
+
+### Bucket de state partagé
+À créer une seule fois, avant le premier `terraform init` (nom global, versionné et chiffré) :
+```bash
+aws s3api create-bucket --bucket novasphere-tfstate-hbq --region us-east-1
+aws s3api put-bucket-versioning --bucket novasphere-tfstate-hbq --versioning-configuration Status=Enabled
+aws s3api put-bucket-encryption --bucket novasphere-tfstate-hbq \
+  --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+aws s3api put-public-access-block --bucket novasphere-tfstate-hbq \
+  --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+```
+
+### Secrets de la CI (GitHub → Settings → Secrets and variables → Actions)
+| Secret | Contenu |
+| :--- | :--- |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` | Credentials de session du Learner Lab (AWS Details → AWS CLI : Show) |
+| `TF_VAR_DB_PASSWORD` / `TF_VAR_DB_PASSWORD_PROD` | Mot de passe applicatif de dev / de prod |
+
+Les credentials du Learner Lab expirent avec la session : les renouveler à chaque démarrage du lab, par l'interface GitHub ou depuis un poste où `~/.aws/credentials` est à jour :
+```bash
+R=ahmadhaddar/novasphere-infra
+gh secret set AWS_ACCESS_KEY_ID     -R $R --body "$(aws configure get aws_access_key_id)"
+gh secret set AWS_SECRET_ACCESS_KEY -R $R --body "$(aws configure get aws_secret_access_key)"
+gh secret set AWS_SESSION_TOKEN     -R $R --body "$(aws configure get aws_session_token)"
+```
+L'environnement GitHub `prod` doit avoir au moins un relecteur requis (Settings → Environments → prod).
+
+---
+
 ## 4. Déploiement Pas-à-Pas (De Zéro)
 
 Le socle backend partagé repose sur le bucket S3 mondial `novasphere-tfstate-hbq` avec chiffrement et verrouillage natif (`use_lockfile = true`).
