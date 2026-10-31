@@ -1,9 +1,9 @@
 # Suivi d'équipe — Séance 9 & Phase d'alternance
 
 ## État au checkpoint de fin de séance 9 :
-- [x] dev déployé par la CI, l'ALB répond sur le port 80
-- [x] secret stocké dans Parameter Store, dépôt propre au `git grep`
-- [x] prod : environnement GitHub protégé configuré, premier plan lu
+- [ ] dev déployé par la CI, l'ALB répond sur le port 80 — non atteint en séance (apply bloqué par des credentials Learner Lab expirés), réalisé le 31/10/2026
+- [ ] secret stocké dans Parameter Store, dépôt propre au `git grep` — secret écrit au premier apply réussi et mots de passe d'exemple retirés du dépôt le 31/10/2026
+- [x] prod : environnement GitHub protégé configuré ; premier plan prod lu et apply approuvé le 31/10/2026
 
 ## Reste à faire pendant l'alternance (3 items nominatifs) :
 1. **Tests unitaires automatisés et assertions de sécurité (`terraform test`)**  
