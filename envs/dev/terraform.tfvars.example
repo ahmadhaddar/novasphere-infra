@@ -11,4 +11,4 @@ asg_desired_capacity = 2
 
 # db_password NE DOIT PAS ETRE ECRIT ICI.
 # Il doit etre fourni par variable d'environnement au runtime :
-# export TF_VAR_db_password='VotreMotDePasseSecret!'
+# export TF_VAR_db_password='<mot-de-passe-dev>'

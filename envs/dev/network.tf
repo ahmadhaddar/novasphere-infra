@@ -1,5 +1,6 @@
 # Module VPC officiel du registre Terraform (Cahier des charges S4)
 module "vpc" {
+  #checkov:skip=CKV_TF_1:Module du registre public epingle par version (~> 6.0), comme demande par le cahier des charges
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 6.0"
 

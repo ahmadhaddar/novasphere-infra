@@ -1,6 +1,5 @@
 # Terraform state & cache
 .terraform/
-.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfstate.backup
