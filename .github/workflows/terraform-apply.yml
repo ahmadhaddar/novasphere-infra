@@ -56,7 +56,10 @@ jobs:
         run: terraform plan -input=false -out=tfplan
 
       - name: "Terraform Apply"
-        run: terraform apply -auto-approve tfplan
+        # Variable ephemere : Terraform exige de la redonner a l'apply du plan sauvegarde
+        env:
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
+        run: terraform apply -input=false -auto-approve tfplan
 
   apply-prod:
     name: "Apply PROD Environment (Protected)"
@@ -99,7 +102,10 @@ jobs:
         run: terraform plan -input=false -out=tfplan
 
       - name: "Terraform Apply"
-        run: terraform apply -auto-approve tfplan
+        # Variable ephemere : Terraform exige de la redonner a l'apply du plan sauvegarde
+        env:
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD_PROD }}
+        run: terraform apply -input=false -auto-approve tfplan
 
   drift-check:
     name: "Drift Detection (plan -detailed-exitcode)"
