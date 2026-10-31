@@ -84,49 +84,54 @@ En environnement de production hors Learner Lab, l'instance EC2 doit être restr
 }
 ```
 
-### 2.3 Preuve d'étanchéité et de moindre privilège
-Depuis une instance de `dev` :
-- Lecture du paramètre de dev :
-  ```bash
-  aws ssm get-parameter --name /novasphere/dev/db_password --with-decryption
-  # Resultat : 200 OK (valeur extraite)
-  ```
-- Tentative de lecture du paramètre de prod :
-  ```bash
-  aws ssm get-parameter --name /novasphere/prod/db_password --with-decryption
-  # Resultat : AccessDeniedException (User is not authorized to perform: ssm:GetParameter on resource: arn:aws:ssm:...:parameter/novasphere/prod/db_password)
-  ```
+### 2.3 Contrainte du Learner Lab : pas de rôle par environnement
+La création d'un rôle IAM est refusée dans le Learner Lab. Test réalisé le 31/10/2026 depuis CloudShell :
+```text
+$ aws iam create-role --role-name test-novasphere --assume-role-policy-document '{...}'
+AccessDenied: User: arn:aws:sts::221242518187:assumed-role/voclabs/... is not authorized
+to perform: iam:CreateRole ... because no identity-based policy allows the iam:CreateRole action
+```
+Conséquences assumées :
+- Les instances de dev et de prod utilisent toutes les deux `LabInstanceProfile`. **L'étanchéité dev/prod au niveau IAM n'est donc pas garantie dans le lab** : une instance de dev peut techniquement lire `/novasphere/prod/*`.
+- La politique de la section 2.2 est la cible hors lab : un rôle et un profil d'instance par environnement, chacun limité à `/novasphere/<env>/*`.
+
+### 2.4 Authentification de la CI
+Même contrainte pour l'OIDC : sans `iam:CreateRole`, le rôle assumé par GitHub Actions ne peut pas être créé. Aucun fournisseur OIDC n'existe dans le compte du lab (`aws iam list-open-id-connect-providers` vide).
+- **Dans le lab** : credentials de session du Learner Lab stockés dans les secrets GitHub (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`). Ils expirent avec la session du lab et sont renouvelés avant chaque utilisation (voir README).
+- **Hors lab** : `envs/<env>/ci.tf` contient déjà le fournisseur OIDC et le rôle `novasphere-ci-<env>` restreint au dépôt, activables avec `enable_oidc_ci = true`. Plus aucune clé stockée, credentials temporaires d'une heure par exécution.
 
 ---
 
-## 3. Résultats de l'Analyse Statique de Sécurité (Scan Checkov)
+## 3. Analyse statique (Checkov)
 
-Le scan statique a été exécuté sur l'ensemble de la base de code Terraform avec la commande :
+Commande, à la racine du dépôt :
 ```bash
-checkov -d envs/dev --framework terraform --compact
+checkov -d envs --framework terraform --compact
 ```
+Résultat au 31/10/2026 (Checkov 3.4.0) : **32 passed, 0 failed, 24 skipped** (12 par environnement).
 
-### 3.1 Règles traitées et corrigées
-1. **CKV_AWS_135 (Require IMDSv2 on Launch Template) :**
-   - *Statut :* **CORRIGÉ**
-   - *Action :* Forçage de `http_tokens = "required"` et `http_put_response_hop_limit = 1` dans le bloc `metadata_options` du Launch Template.
-2. **CKV_AWS_260 (Security Group Ingress restricts port 80 to trusted CIDR/Source) :**
-   - *Statut :* **CORRIGÉ**
-   - *Action :* Le Security Group des serveurs applicatifs refuse tout trafic depuis `0.0.0.0/0`. Le flux entrant est restreint par référence au Security Group de l'ALB (`security_groups = [aws_security_group.alb.id]`).
-3. **CKV_AWS_23 (Security Group SSH port restriction) :**
-   - *Statut :* **CORRIGÉ**
-   - *Action :* Aucun port 22 n'est ouvert sur les instances web.
+Avant correction, les annotations `checkov:skip` étaient placées au-dessus des ressources, donc ignorées par Checkov (28 échecs, 0 skip). Elles sont maintenant à l'intérieur de chaque bloc, comme l'exige la syntaxe.
 
-### 3.2 Règles skippées avec justification formelle
+### 3.1 Corrigé dans le code
+- **CKV_AWS_131** : l'ALB rejette les en-têtes HTTP invalides (`drop_invalid_header_fields = true`).
+- **CKV_AWS_382** : la sortie du Security Group de l'ALB est limitée au port 80 vers le CIDR du VPC (avant : tout protocole vers 0.0.0.0/0).
+- **IMDSv2** : `http_tokens = "required"` et `http_put_response_hop_limit = 1` sur le Launch Template (module).
+- **SSH** : aucun port 22 ouvert. Le Security Group des instances n'accepte que le port 80 depuis le Security Group de l'ALB.
 
-```hcl
-# checkov:skip=CKV_AWS_150: "L'ALB public doit exposer le port 80 pour la demonstration du flux HTTP initial"
-# checkov:skip=CKV_AWS_91: "Les logs d'acces ALB sont desactives pour economiser le stockage S3 en Learner Lab"
-# checkov:skip=CKV_AWS_130: "map_public_ip_on_launch est requis car le Learner Lab interdit les NAT Gateways onereuses"
-```
+### 3.2 Ignoré avec justification
+- **CKV_AWS_260, CKV_AWS_2, CKV_AWS_103, CKV2_AWS_20, CKV_AWS_378** : HTTP en clair. Le socle impose un ALB public sur le port 80 ; sans domaine ni certificat ACM dans le lab, pas de HTTPS.
+- **CKV_AWS_150** : pas de protection contre la suppression de l'ALB, pour pouvoir faire `terraform destroy` à chaque fin de session.
+- **CKV_AWS_91** : pas de logs d'accès ALB, pour éviter un bucket S3 de logs supplémentaire dans le budget du lab.
+- **CKV2_AWS_28** : pas de WAF, hors périmètre du socle et facturé.
+- **CKV_AWS_337** : le SecureString est chiffré par la clé KMS gérée par AWS (`aws/ssm`), pas de clé KMS client dans le lab.
+- **CKV_TF_1** : modules épinglés par version (`~> 6.0` pour le VPC du registre, `ref=v1.1.0` pour le module d'équipe) et non par hash de commit, comme le demande le cahier des charges.
+- **CKV_AWS_394** : seules les deux premières zones de disponibilité sont retenues via `slice()`, l'ajout d'une zone par AWS ne change pas l'infrastructure.
 
-| ID Règle Checkov | Description | Justification Technique |
-| :--- | :--- | :--- |
-| `CKV_AWS_150` | Ensure that Load Balancer has deletion protection enabled | En environnement de lab et pour les besoins des tests et des séances de TP, la protection contre la suppression empêcherait le `terraform destroy` en fin de séance. |
-| `CKV_AWS_130` | Ensure EC2 instances in VPC subnets do not have public IP | En l'absence de NAT Gateway (écartée pour raisons de coûts horaires), les instances doivent disposer d'une IP publique pour contacter Internet et installer Nginx. Leur sécurité est garantie par leur Security Group n'acceptant que l'ALB. |
-| `CKV_AWS_91` | Ensure ALB has access logging enabled | La journalisation des requêtes ALB nécessite un bucket S3 dédié avec politique de bucket complexe, non pertinent dans le quota restreint du Learner Lab. |
+---
+
+## 4. Hygiène Git
+
+- Aucun mot de passe dans le code, le README ou les workflows. Vérification : `git grep -niE "password\s*=\s*\"[^$<]"` ne renvoie rien.
+- Les secrets de la CI vivent uniquement dans les secrets GitHub (`TF_VAR_DB_PASSWORD`, `TF_VAR_DB_PASSWORD_PROD`).
+- Des mots de passe d'exemple ont figuré dans le README et les workflows avant le 31/10/2026. Ils n'ont jamais été utilisés comme valeur réelle : au moment de la correction, aucun paramètre `/novasphere/*/db_password` n'existait dans Parameter Store. Les mots de passe actuels sont neufs.
+- `.gitignore` exclut `*.tfstate*`, `*.tfvars` (sauf les exemples), `*.pem`, `.env` et `.terraform/`.
