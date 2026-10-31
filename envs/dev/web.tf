@@ -2,7 +2,7 @@
 resource "aws_security_group" "alb" {
   #checkov:skip=CKV_AWS_260:ALB public, le socle impose HTTP 80 ouvert depuis Internet (pas de certificat ACM dans le lab)
   name_prefix = "${local.name}-alb-sg-"
-  description = "Security Group public pour l'Application Load Balancer"
+  description = "Security Group public de l Application Load Balancer (HTTP 80)"
   vpc_id      = module.vpc.vpc_id
 
   ingress {
