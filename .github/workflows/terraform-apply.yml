@@ -128,6 +128,8 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.16.1"
+          # Sans wrapper : le wrapper renvoie 0 au lieu du code 2 de -detailed-exitcode
+          terraform_wrapper: false
 
       - name: "Configure AWS Credentials"
         uses: aws-actions/configure-aws-credentials@v4
